@@ -61,27 +61,25 @@ export class RealFSClient {
 
     public send_request<O extends keyof typeof opcode_map>(
         operation: O,
-        callback: (response: ReadResponseArgs<O>) => void,
         ...params: WriteArgs<O>
-    ) {
+    ): Promise<ReadResponseArgs<O>> {
         const buffer = new SpecBuffer();
-        // const id = hash32(Date.now() + Math.random() + this.nextId++);
-        // this.nextId++;
         const id = this.nextId++;
         control_message.write(buffer, operation, id);
         writeSpec(operation, buffer, ...params);
-        // this.emitter.once(id.toString(), (buffer: SpecBuffer) => {
-        //     console.log("Got response for", id);
-        //     const operation_message = response_spec[operation].read(buffer);
-        //     callback(operation_message as ReadResponseArgs<O>);
-        // });
-        this.pendingRequests.set(id, (buffer) => {
-            console.log("Got response for", id);
-            const operation_message = response_spec[operation].read(buffer);
-            callback(operation_message as ReadResponseArgs<O>);
+        return new Promise((resolve, reject) => {
+            this.pendingRequests.set(id, (buf) => {
+                try {
+                    console.log("Got response for", id);
+                    const res = response_spec[operation].read(buf);
+                    resolve(res as ReadResponseArgs<O>);
+                } catch (err) {
+                    reject(err);
+                }
+            });
+            this.socket.send(buffer.getBuffer());
+            console.log("Sent", operation, params, id);
         });
-        this.socket.send(buffer.getBuffer());
-        console.log("Sent", operation, params, id);
     }
 }
 type Metadata = Partial<Record<keyof InodeLike, string>>;
@@ -105,117 +103,75 @@ export class RealFS extends Async(FileSystem) {
         this._sync = sync;
     }
 
-    readdir(path: string): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.client.send_request("ls", (res) => {
-                resolve(res.entries);
-            }, path);
-        });
+    async readdir(path: string) {
+        return (await this.client.send_request("ls", path)).entries;
     }
 
-    rename(oldPath: string, newPath: string): Promise<void> {
-        if (oldPath == newPath) return Promise.resolve();
-        return new Promise((resolve, reject) => {
-            this.client.send_request("move", (res) => {
-                resolve();
-            }, oldPath, newPath);
+    async rename(oldPath: string, newPath: string) {
+        if (oldPath == newPath) return;
+        await this.client.send_request("move", oldPath, newPath);
+    }
+    async stat(path: string) {
+        const res = await this.client.send_request("stat", path);
+        return new Inode({
+            atimeMs: Number(res.stat.atime),
+            ctimeMs: Number(res.stat.ctime),
+            mtimeMs: Number(res.stat.mtime),
+            size: res.stat.size,
+            mode: res.stat.mode,
         });
     }
-    stat(path: string): Promise<InodeLike> {
-        return new Promise((resolve, reject) => {
-            this.client.send_request("stat", res => {
-                console.log("Stat response", res);
-                resolve(new Inode({
-                    atimeMs: Number(res.stat.atime),
-                    ctimeMs: Number(res.stat.ctime),
-                    mtimeMs: Number(res.stat.mtime),
-                    size: res.stat.size,
-                    mode: res.stat.mode,
-                }));
-            }, path);
+    async touch(path: string, metadata: Partial<InodeLike>) {
+        await this.client.send_request("touch", path, {
+            atime: BigInt(metadata.atimeMs ?? 0),
+            ctime: BigInt(metadata.ctimeMs ?? 0),
+            mtime: BigInt(metadata.mtimeMs ?? 0),
+            size: metadata.size ?? 0,
+            mode: metadata.mode ?? 0,
         });
     }
-    touch(path: string, metadata: Partial<InodeLike>): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.client.send_request("touch", (res) => {
-                resolve();
-            }, path, {
-                atime: BigInt(metadata.atimeMs ?? 0),
-                ctime: BigInt(metadata.ctimeMs ?? 0),
-                mtime: BigInt(metadata.mtimeMs ?? 0),
-                size: metadata.size ?? 0,
-                mode: metadata.mode ?? 0,
-            });
+    async createFile(path: string, options: CreationOptions) {
+        const res = await this.client.send_request("new", path, {
+            mode: options.mode ?? 0o100644,
+        });
+
+        return new Inode({
+            atimeMs: Number(res.result.atime),
+            ctimeMs: Number(res.result.ctime),
+            mtimeMs: Number(res.result.mtime),
+            size: res.result.size,
+            mode: res.result.mode,
         });
     }
-    createFile(path: string, options: CreationOptions): Promise<InodeLike> {
-        return new Promise((resolve, reject) => {
-            this.client.send_request("new", (res) => {
-                console.log("Create response", res);
-                resolve(new Inode({
-                    atimeMs: Number(res.result.atime),
-                    ctimeMs: Number(res.result.ctime),
-                    mtimeMs: Number(res.result.mtime),
-                    size: res.result.size,
-                    mode: res.result.mode,
-                }));
-            }, path, {
-                mode: options.mode ?? 0o100644,
-            });
-        });
+    async unlink(path: string) {
+        await this.client.send_request("unlink", path);
     }
-    unlink(path: string): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.client.send_request("unlink", (res) => {
-                console.log("Unlink response", res);
-                resolve();
-            }, path);
-        });
+    async rmdir(path: string) {
+        await this.client.send_request("rmdir", path);
     }
-    rmdir(path: string): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.client.send_request("rmdir", (res) => {
-                console.log("Rmdir response", res);
-                resolve();
-            }, path);
-        });
-    }
-    mkdir(path: string, options: CreationOptions): Promise<InodeLike> {
-        return new Promise((resolve, reject) => {
-            this.client.send_request("new", (res) => {
-                console.log("Mkdir response", res);
-                resolve(new Inode({
-                    atimeMs: Number(res.result.atime),
-                    ctimeMs: Number(res.result.ctime),
-                    mtimeMs: Number(res.result.mtime),
-                    size: res.result.size,
-                    mode: res.result.mode,
-                }));
-            }, path, {
-                mode: options.mode ?? 0o40777,
-            });
+    async mkdir(path: string, options: CreationOptions) {
+        const res = await this.client.send_request("new", path, {
+            mode: options.mode ?? 0o40777,
+        })
+
+        return new Inode({
+            atimeMs: Number(res.result.atime),
+            ctimeMs: Number(res.result.ctime),
+            mtimeMs: Number(res.result.mtime),
+            size: res.result.size,
+            mode: res.result.mode,
         });
     }
     link(target: string, link: string): Promise<void> {
         console.log("link", ...arguments);
         throw new Error("Method not implemented.");
     }
-    read(path: string, buffer: Uint8Array, start: number, end: number): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.client.send_request("read", (res) => {
-                console.log("Read response", res);
-                buffer.set(res.data, 0);
-                resolve();
-            }, path, start, end);
-        });
+    async read(path: string, buffer: Uint8Array, start: number, end: number) {
+        const res = await this.client.send_request("read", path, start, end);
+        buffer.set(res.data, 0);
     }
-    write(path: string, buffer: Uint8Array, offset: number): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.client.send_request("write", (res) => {
-                console.log("Write response", res);
-                resolve();
-            }, path, /*buffer.slice(offset)*/ buffer.subarray(offset, offset + length), offset);
-        });
+    async write(path: string, buffer: Uint8Array, offset: number) {
+        await this.client.send_request("write", path, buffer.subarray(offset, offset + length), offset);
     }
 }
 
