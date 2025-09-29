@@ -39,6 +39,7 @@ export class RealFSClient {
     private nextId: number;
     constructor(url: string) {
         this.socket = new WebSocket(`ws://${url}`);
+        this.socket.binaryType = "arraybuffer";
         // this.emitter = new EventEmitter();
         this.socket.onmessage = async event => {
             const data = event.data instanceof Blob ? new Uint8Array(await event.data.arrayBuffer()) : event.data;
