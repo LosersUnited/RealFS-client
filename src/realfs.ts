@@ -1,10 +1,14 @@
 import { SpecBuffer } from "RealFS-ng-prototype.git#dev/real-fs-protocol/type_system.ts";
 import { control_message, opcode_map, response_spec, spec } from "RealFS-ng-prototype.git#dev/real-fs-protocol/shared.ts";
 
-import type { Backend, CreationOptions, InodeLike } from '@zenfs/core';
+import type { Backend, CreationOptions, InodeLike, WriteStreamOptions } from '@zenfs/core';
 import { _inode_fields, Async, FileSystem, Inode } from '@zenfs/core';
+import { SnapshotRestorer } from "./snapshot";
+import { dirname, join, sep } from "@zenfs/core/path.js";
 
-// import { EventEmitter } from 'eventemitter3';
+const S_IFMT = 0o170000;  // bitmask for the file type
+const S_IFDIR = 0o040000; // directory
+const S_IFREG = 0o100000; // regular file
 
 function hash32(x: number) {
     x = x >>> 0;
@@ -28,6 +32,23 @@ function writeSpec<O extends keyof typeof spec>(
     ...args: WriteArgs<O>
 ): void {
     (spec[op].write as any)(buf, ...args);
+}
+
+const errAsBytes = new TextEncoder().encode("ERR:");
+
+function deserializeError(obj: any) {
+    if (!obj || typeof obj !== 'object') {
+        return obj;
+    }
+    const error = new Error(obj.message);
+    error.name = obj.name || 'Error';
+    error.stack = obj.stack;
+    for (const key of Object.keys(obj)) {
+        if (!['name', 'message', 'stack'].includes(key)) {
+            (error as any)[key] = obj[key];
+        }
+    }
+    return error;
 }
 
 export class RealFSClient {
@@ -72,7 +93,18 @@ export class RealFSClient {
             this.pendingRequests.set(id, (buf) => {
                 try {
                     console.log("Got response for", id);
+                    const oldOffset = buf.getOffset();
+                    const nextFourBytes = buf.read(4);
+                    if (nextFourBytes.every((x, index) => {
+                        return x === errAsBytes[index];
+                    })) {
+                        const decoded = new TextDecoder().decode(buf.read(buf.remaining()));
+                        const errorRaw = JSON.parse(decoded.split("\x00")[0]);
+                        throw deserializeError(errorRaw);
+                    }
+                    buf.setOffset(oldOffset);
                     const res = response_spec[operation].read(buf);
+                    // console.log("Got response", res, id);
                     resolve(res as ReadResponseArgs<O>);
                 } catch (err) {
                     reject(err);
@@ -81,6 +113,20 @@ export class RealFSClient {
             this.socket.send(buffer.getBuffer());
             console.log("Sent", operation, params, id);
         });
+    }
+
+    public reattach() {
+        const url = this.socket.url;
+        if (this.socket.readyState != WebSocket.OPEN) {
+            const originalMessageHandler = this.socket.onmessage;
+            this.socket.close();
+            this.socket = new WebSocket(url);
+            this.socket.binaryType = "arraybuffer";
+            this.socket.onmessage = originalMessageHandler;
+        }
+    }
+    public getSnapshotPathname() {
+        return this.socket.url.replace(/^ws/, "http").replace("/ws", "/snapshot");
     }
 }
 type Metadata = Partial<Record<keyof InodeLike, string>>;
@@ -93,15 +139,82 @@ function stringifyStats(stats: Partial<InodeLike>): Partial<Metadata> {
 }
 
 export class RealFS extends Async(FileSystem) {
-    _sync?: FileSystem | undefined;
+    _sync: FileSystem;
     private readonly client: RealFSClient;
+    private snapshotRestorer: SnapshotRestorer;
     public constructor(
         client: RealFSClient,
-        sync?: FileSystem | undefined
+        sync: FileSystem
     ) {
         super(0x7265616C, "realfs");
+        this.attributes.set("no_async_preload", true); // hack
         this.client = client;
         this._sync = sync;
+        this.snapshotRestorer = new SnapshotRestorer("/", join, (...args) => {
+            const options = args[1] as WriteStreamOptions;
+            if (!this._sync!.existsSync(args[0] as string)) {
+                this._sync!.createFileSync(args[0] as string, {
+                    mode: 777, // this is wrong
+                    gid: 0,
+                    uid: 0,
+                });
+            }
+            const streamWrite = this._sync!.streamWrite(args[0] as string, options);
+            const writer = streamWrite.getWriter();
+            const listeners = new Map<string, ((...args: any[]) => void)[]>();
+            const state = {
+                _closing: false,
+            };
+            return {
+                end() {
+                    if (state._closing) return;
+                    state._closing = true;
+                    const promise = writer.close();
+                    promise.then(() => {
+                        listeners.get("finish")?.forEach(listener => listener());
+                        listeners.clear();
+                    });
+                },
+                close() {
+                    this.end();
+                },
+                on(event: string, listener: (...args: any[]) => void) {
+                    if (listeners.has(event))
+                        listeners.get(event)?.push(listener);
+                    else
+                        listeners.set(event, [listener]);
+                    return this;
+                },
+                async write(chunk: Uint8Array) {
+                    await writer.write(chunk);
+                },
+            } as any;
+        }, sep, dirname, (path: any) => {
+            if (this._sync!.existsSync(path)) {
+                return;
+            }
+            this._sync!.mkdirSync(path, {
+                mode: 420,
+                gid: 0,
+                uid: 0,
+            });
+        }, (...args) => {
+            const atime = args[1];
+            const mtime = args[2];
+            const cb = args[3];
+            this._sync!.touchSync(args[0] as string, {
+                atimeMs: atime instanceof Date ? atime.getTime() : atime,
+                mtimeMs: mtime instanceof Date ? mtime.getTime() : mtime,
+            });
+            if (cb)
+                cb(null);
+        });
+    }
+    async ready() {
+        await this._sync?.ready();
+        await this.snapshotRestorer.restoreFromUrl(this.client.getSnapshotPathname());
+        await super.ready();
+        this.attributes.delete("no_async_preload");
     }
 
     async readdir(path: string) {
@@ -133,7 +246,7 @@ export class RealFS extends Async(FileSystem) {
     }
     async createFile(path: string, options: CreationOptions) {
         const res = await this.client.send_request("new", path, {
-            mode: options.mode ?? 0o100644,
+            mode: options.mode | S_IFREG,
         });
 
         return new Inode({
@@ -152,8 +265,8 @@ export class RealFS extends Async(FileSystem) {
     }
     async mkdir(path: string, options: CreationOptions) {
         const res = await this.client.send_request("new", path, {
-            mode: options.mode ?? 0o40777,
-        })
+            mode: options.mode | S_IFDIR,
+        });
 
         return new Inode({
             atimeMs: Number(res.result.atime),
@@ -172,13 +285,13 @@ export class RealFS extends Async(FileSystem) {
         buffer.set(res.data, 0);
     }
     async write(path: string, buffer: Uint8Array, offset: number) {
-        await this.client.send_request("write", path, buffer.subarray(offset, offset + length), offset);
+        await this.client.send_request("write", path, buffer, offset);
     }
 }
 
 export interface RealFSOptions {
     client: RealFSClient;
-    sync?: FileSystem;
+    sync: FileSystem;
 }
 
 export const _RealFS = {
@@ -186,14 +299,14 @@ export const _RealFS = {
 
     options: {
         client: { type: 'object', required: true },
-        sync: { type: 'object', required: false },
+        sync: { type: 'object', required: true },
     },
 
     isAvailable(): boolean {
         return true;
     },
 
-    create(options) {
+    create(options: RealFSOptions) {
         return new RealFS(options.client, options.sync);
     },
 } satisfies Backend<RealFS, RealFSOptions>;
