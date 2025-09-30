@@ -138,6 +138,78 @@ function stringifyStats(stats: Partial<InodeLike>): Partial<Metadata> {
     return data;
 }
 
+const makeFakeWriteStream = (sync: FileSystem, path: string, options: WriteStreamOptions) => {
+    if (!sync.existsSync(path)) {
+        sync.createFileSync(path, {
+            mode: S_IFREG | 0o777,
+            gid: 0,
+            uid: 0,
+        });
+    }
+    const streamWrite = sync.streamWrite(path, options);
+    const writer = streamWrite.getWriter();
+    const listeners = new Map<string, ((...args: any[]) => void)[]>();
+    const state = {
+        _closing: false,
+    };
+    return {
+        end() {
+            if (state._closing) return;
+            state._closing = true;
+            const promise = writer.close();
+            promise.then(() => {
+                listeners.get("finish")?.forEach(listener => listener());
+                listeners.clear();
+            });
+        },
+        close() {
+            this.end();
+        },
+        on(event: string, listener: (...args: any[]) => void) {
+            if (listeners.has(event))
+                listeners.get(event)?.push(listener);
+            else
+                listeners.set(event, [listener]);
+            return this;
+        },
+        async write(chunk: Uint8Array) {
+            await writer.write(chunk);
+        },
+    } as any;
+}
+
+const syncBoundMkdir = (sync: FileSystem, path: string, options: { recursive: boolean } = { recursive: false }) => {
+    if (options.recursive === true) {
+        const split = path.split(sep).filter(Boolean);
+        for (let i = 1; i < split.length - 1; ++i) {
+            const subpath = split.slice(0, i + 1).join("/");
+            if (sync.existsSync(subpath)) continue;
+            sync.mkdirSync(subpath, {
+                mode: S_IFDIR | 0o777,
+                gid: 0,
+                uid: 0,
+            });
+        }
+    }
+    if (sync.existsSync(path)) {
+        return;
+    }
+    sync.mkdirSync(path, {
+        mode: S_IFDIR | 0o777,
+        gid: 0,
+        uid: 0,
+    });
+}
+
+const syncBoundUtimes = (sync: FileSystem, path: string, atime: Date | number, mtime: Date | number, cb: (err: Error | null) => void) => {
+    sync.touchSync(path, {
+        atimeMs: atime instanceof Date ? atime.getTime() : atime,
+        mtimeMs: mtime instanceof Date ? mtime.getTime() : mtime,
+    });
+    if (cb)
+        cb(null);
+}
+
 export class RealFS extends Async(FileSystem) {
     _sync: FileSystem;
     private readonly client: RealFSClient;
@@ -150,65 +222,15 @@ export class RealFS extends Async(FileSystem) {
         this.attributes.set("no_async_preload", true); // hack
         this.client = client;
         this._sync = sync;
-        this.snapshotRestorer = new SnapshotRestorer("/", join, (...args) => {
-            const options = args[1] as WriteStreamOptions;
-            if (!this._sync!.existsSync(args[0] as string)) {
-                this._sync!.createFileSync(args[0] as string, {
-                    mode: 777, // this is wrong
-                    gid: 0,
-                    uid: 0,
-                });
-            }
-            const streamWrite = this._sync!.streamWrite(args[0] as string, options);
-            const writer = streamWrite.getWriter();
-            const listeners = new Map<string, ((...args: any[]) => void)[]>();
-            const state = {
-                _closing: false,
-            };
-            return {
-                end() {
-                    if (state._closing) return;
-                    state._closing = true;
-                    const promise = writer.close();
-                    promise.then(() => {
-                        listeners.get("finish")?.forEach(listener => listener());
-                        listeners.clear();
-                    });
-                },
-                close() {
-                    this.end();
-                },
-                on(event: string, listener: (...args: any[]) => void) {
-                    if (listeners.has(event))
-                        listeners.get(event)?.push(listener);
-                    else
-                        listeners.set(event, [listener]);
-                    return this;
-                },
-                async write(chunk: Uint8Array) {
-                    await writer.write(chunk);
-                },
-            } as any;
-        }, sep, dirname, (path: any) => {
-            if (this._sync!.existsSync(path)) {
-                return;
-            }
-            this._sync!.mkdirSync(path, {
-                mode: 420,
-                gid: 0,
-                uid: 0,
-            });
-        }, (...args) => {
-            const atime = args[1];
-            const mtime = args[2];
-            const cb = args[3];
-            this._sync!.touchSync(args[0] as string, {
-                atimeMs: atime instanceof Date ? atime.getTime() : atime,
-                mtimeMs: mtime instanceof Date ? mtime.getTime() : mtime,
-            });
-            if (cb)
-                cb(null);
-        });
+        this.snapshotRestorer = new SnapshotRestorer(
+            "/",
+            join,
+            makeFakeWriteStream.bind(null, this._sync!),
+            sep,
+            dirname,
+            syncBoundMkdir.bind(null, this._sync!) as any,
+            syncBoundUtimes.bind(null, this._sync!) as any,
+        );
     }
     async ready() {
         await this._sync?.ready();

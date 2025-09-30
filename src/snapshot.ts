@@ -15,6 +15,31 @@ type FileEntry = {
 const MAGIC = new TextEncoder().encode("SNAPSHOT");
 const VERSION = "0.1";
 
+/*
+    structure:
+
+    header:
+        magic: 8 bytes
+        version_length: 4 bytes
+        version: variable length
+        total_bytes: 8 bytes
+        entries_count: 4 bytes
+    entries:
+        path_offset: 4 bytes
+        path_len: 4 bytes
+        type: 4 bytes
+        mode: 4 bytes
+        mtime: 8 bytes
+        size: 8 bytes
+        data_offset: 8 bytes
+    path blob:
+        concatenated paths of all entries
+    data:
+        concatenated data blocks of all entries
+
+    endianness is dictated by underlying spec_types definitions.
+*/
+
 function readUint64(buf: SpecBuffer) {
     const low = (buf.readFromSpecType("uint32") as number) >>> 0;
     const high = (buf.readFromSpecType("uint32") as number) >>> 0;
