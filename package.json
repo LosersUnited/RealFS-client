@@ -1,0 +1,12 @@
+{
+  "name": "real-fs-client",
+  "version": "1.0.0",
+  "description": "RealFS backend for ZenFS",
+  "packageManager": "pnpm@10.20.0",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@zenfs/core": "^2.4.2",
+    "@zenfs/dom": "^1.2.5",
+    "RealFS-ng-prototype.git#dev": "github:LosersUnited/RealFS-ng-prototype"
+  }
+}
