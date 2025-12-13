@@ -1,1 +1,4 @@
 node_modules/
+deno.json
+deno.lock
+.vscode/settings.json

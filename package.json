@@ -4,6 +4,9 @@
   "description": "RealFS backend for ZenFS",
   "packageManager": "pnpm@10.25.0",
   "main": "src/index.ts",
+  "scripts": {
+    "test": "deno test --allow-read --allow-write --allow-net --allow-env"
+  },
   "dependencies": {
     "@zenfs/core": "^2.4.4",
     "RealFS-ng-prototype.git#dev": "github:LosersUnited/RealFS-ng-prototype"

@@ -128,6 +128,10 @@ export class RealFSClient {
     public getSnapshotPathname() {
         return this.socket.url.replace(/^ws/, "http").replace("/ws", "/snapshot");
     }
+
+    public teardown() {
+        this.socket.close();
+    }
 }
 type Metadata = Partial<Record<keyof InodeLike, string>>;
 function stringifyStats(stats: Partial<InodeLike>): Partial<Metadata> {
@@ -219,7 +223,6 @@ export class RealFS extends Async(FileSystem) {
         sync: FileSystem
     ) {
         super(0x7265616C, "realfs");
-        this.attributes.set("no_async_preload", true); // hack
         this.client = client;
         this._sync = sync;
         this.snapshotRestorer = new SnapshotRestorer(
@@ -232,12 +235,10 @@ export class RealFS extends Async(FileSystem) {
             syncBoundUtimes.bind(null, this._sync!) as any,
         );
     }
-    override async ready() {
-        await this._sync?.ready();
-        await this.snapshotRestorer.restoreFromUrl(this.client.getSnapshotPathname());
-        Reflect.set(this, "_isInitialized", true);
-        await super.ready();
-        this.attributes.delete("no_async_preload");
+    async crossCopy(path: string) {
+        if (path === "/")
+            return await this.snapshotRestorer.restoreFromUrl(this.client.getSnapshotPathname());
+        throw new Error(`not supposed to be here at ${path}`);
     }
 
     async readdir(path: string) {
