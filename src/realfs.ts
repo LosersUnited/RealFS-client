@@ -3,7 +3,7 @@ import { control_message, opcode_map, response_spec, spec } from "RealFS-ng-prot
 
 import type { Backend, CreationOptions, InodeLike, WriteStreamOptions } from '@zenfs/core';
 import { _inode_fields, Async, FileSystem, Inode } from '@zenfs/core';
-import { SnapshotRestorer } from "./snapshot";
+import { SnapshotRestorer } from "./snapshot.ts";
 import { dirname, join, sep } from "@zenfs/core/path.js";
 
 const S_IFMT = 0o170000;  // bitmask for the file type
@@ -211,7 +211,7 @@ const syncBoundUtimes = (sync: FileSystem, path: string, atime: Date | number, m
 }
 
 export class RealFS extends Async(FileSystem) {
-    _sync: FileSystem;
+    override _sync: FileSystem;
     private readonly client: RealFSClient;
     private snapshotRestorer: SnapshotRestorer;
     public constructor(
@@ -232,9 +232,10 @@ export class RealFS extends Async(FileSystem) {
             syncBoundUtimes.bind(null, this._sync!) as any,
         );
     }
-    async ready() {
+    override async ready() {
         await this._sync?.ready();
         await this.snapshotRestorer.restoreFromUrl(this.client.getSnapshotPathname());
+        Reflect.set(this, "_isInitialized", true);
         await super.ready();
         this.attributes.delete("no_async_preload");
     }
