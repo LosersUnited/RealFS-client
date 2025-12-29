@@ -13,12 +13,12 @@ importers:
         version: 2.4.4
       RealFS-ng-prototype.git#dev:
         specifier: github:LosersUnited/RealFS-ng-prototype
-        version: https://codeload.github.com/LosersUnited/RealFS-ng-prototype/tar.gz/1ca780f13b431579051574729e8f3febd9e41042
+        version: https://codeload.github.com/LosersUnited/RealFS-ng-prototype/tar.gz/eb473ca27545abdb74b9ebb3c9e990794212efb4
 
 packages:
 
-  '@types/node@24.10.3':
-    resolution: {integrity: sha512-gqkrWUsS8hcm0r44yn7/xZeV1ERva/nLgrLxFRUGb7aoNMIJfZJ3AC261zDQuOAKC7MiXai1WCpYc48jAHoShQ==}
+  '@types/node@24.10.4':
+    resolution: {integrity: sha512-vnDVpYPMzs4wunl27jHrfmwojOGKya0xyM3sH+UE5iv5uPS6vX7UIoh6m+vQc5LGBq52HBKPIn/zcSZVzeDEZg==}
 
   '@xterm/xterm@5.5.0':
     resolution: {integrity: sha512-hqJHYaQb5OptNunnyAnkHyM8aCjZ1MEIDTQu1iIbbTD/xops91NB5yq1ZK/dC2JDbVWtF23zUtl9JE2NqwT87A==}
@@ -28,8 +28,8 @@ packages:
     engines: {node: '>= 18'}
     hasBin: true
 
-  RealFS-ng-prototype.git#dev@https://codeload.github.com/LosersUnited/RealFS-ng-prototype/tar.gz/1ca780f13b431579051574729e8f3febd9e41042:
-    resolution: {tarball: https://codeload.github.com/LosersUnited/RealFS-ng-prototype/tar.gz/1ca780f13b431579051574729e8f3febd9e41042}
+  RealFS-ng-prototype.git#dev@https://codeload.github.com/LosersUnited/RealFS-ng-prototype/tar.gz/eb473ca27545abdb74b9ebb3c9e990794212efb4:
+    resolution: {tarball: https://codeload.github.com/LosersUnited/RealFS-ng-prototype/tar.gz/eb473ca27545abdb74b9ebb3c9e990794212efb4}
     version: 0.0.0
 
   abort-controller@3.0.0:
@@ -86,7 +86,7 @@ packages:
 
 snapshots:
 
-  '@types/node@24.10.3':
+  '@types/node@24.10.4':
     dependencies:
       undici-types: 7.16.0
 
@@ -95,7 +95,7 @@ snapshots:
 
   '@zenfs/core@2.4.4':
     dependencies:
-      '@types/node': 24.10.3
+      '@types/node': 24.10.4
       buffer: 6.0.3
       eventemitter3: 5.0.1
       kerium: 1.3.8
@@ -103,7 +103,7 @@ snapshots:
       readable-stream: 4.7.0
       utilium: 2.5.8
 
-  RealFS-ng-prototype.git#dev@https://codeload.github.com/LosersUnited/RealFS-ng-prototype/tar.gz/1ca780f13b431579051574729e8f3febd9e41042: {}
+  RealFS-ng-prototype.git#dev@https://codeload.github.com/LosersUnited/RealFS-ng-prototype/tar.gz/eb473ca27545abdb74b9ebb3c9e990794212efb4: {}
 
   abort-controller@3.0.0:
     dependencies:
