@@ -284,11 +284,10 @@ export class SnapshotRestorer {
             console.log(`Created directory: ${dir}`);
         }
 
-        if (initialData.length > 0) {
-            this.leftoverDataQueue.push(initialData);
-        }
-
         await this.advanceToNextFile();
+        if (initialData.length > 0) {
+            await this.handleDataChunk(initialData);
+        }
     }
 
     private async advanceToNextFile() {
