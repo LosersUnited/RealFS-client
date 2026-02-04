@@ -220,7 +220,11 @@ export class SnapshotRestorer {
                 this.flags |= ReadFlags.HAD_READ_ALL_ENTRIES;
                 this.stage = RestoreStage.PATH_BLOB;
                 const pathBlobSize = buf.readFromSpecType("uint32") as number;
-                this.pathBlobEndOffset = this.entries[this.entries_count - 1].pathOffset + pathBlobSize;
+                if (this.entries_count > 0) {
+                    this.pathBlobEndOffset = this.entries[0].pathOffset + pathBlobSize;
+                } else {
+                    this.pathBlobEndOffset = 0;
+                }
                 console.log(`Finished reading all ${this.entries_count} entries, moving to path blob, which promises to be exactly ${pathBlobSize} bytes long at pos ${this.pathBlobEndOffset}`);
             }
         }
