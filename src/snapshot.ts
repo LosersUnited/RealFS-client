@@ -4,7 +4,6 @@ import { SpecBuffer } from "RealFS-ng-prototype.git#dev/real-fs-protocol/type_sy
 type FileEntry = {
     path: string;
     pathOffset: number;
-    pathLen: number;
     type: number;
     mode: number;
     mtime: bigint;
@@ -13,7 +12,7 @@ type FileEntry = {
 };
 
 const MAGIC = new TextEncoder().encode("SNAPSHOT");
-const VERSION = "0.1";
+const VERSION = "0.2";
 
 /*
     structure:
@@ -180,7 +179,6 @@ export class SnapshotRestorer {
                     this.entries.push({
                         path: "",
                         pathOffset: 0,
-                        pathLen: 0,
                         type: 0,
                         mode: 0,
                         mtime: 0n,
@@ -209,7 +207,6 @@ export class SnapshotRestorer {
                     }
                     const entryIndex = this.entries_read;
                     this.entries[entryIndex].pathOffset = buf.readFromSpecType("uint32") as number;
-                    this.entries[entryIndex].pathLen = buf.readFromSpecType("uint32") as number;
                     this.entries[entryIndex].type = buf.readFromSpecType("uint32") as number;
                     this.entries[entryIndex].mode = buf.readFromSpecType("uint32") as number;
                     this.entries[entryIndex].mtime = readUint64(buf);
@@ -222,7 +219,9 @@ export class SnapshotRestorer {
             if (this.entries_read === this.entries_count) {
                 this.flags |= ReadFlags.HAD_READ_ALL_ENTRIES;
                 this.stage = RestoreStage.PATH_BLOB;
-                console.log(`Finished reading all ${this.entries_count} entries, moving to path blob`);
+                const pathBlobSize = buf.readFromSpecType("uint32") as number;
+                this.pathBlobEndOffset = this.entries[this.entries_count - 1].pathOffset + pathBlobSize;
+                console.log(`Finished reading all ${this.entries_count} entries, moving to path blob, which promises to be exactly ${pathBlobSize} bytes long at pos ${this.pathBlobEndOffset}`);
             }
         }
     }
@@ -232,15 +231,6 @@ export class SnapshotRestorer {
 
         const buffer = buf.getBuffer();
 
-        if (this.pathBlobEndOffset === 0) {
-            let maxEnd = 0;
-            for (const entry of this.entries) {
-                maxEnd = Math.max(maxEnd, entry.pathOffset + entry.pathLen);
-            }
-            this.pathBlobEndOffset = maxEnd;
-            console.log(`Path blob ends at offset ${this.pathBlobEndOffset}`);
-        }
-
         if (buffer.length < this.pathBlobEndOffset) {
             console.log(`Waiting for more data: have ${buffer.length}, need ${this.pathBlobEndOffset}`);
             return;
@@ -248,7 +238,10 @@ export class SnapshotRestorer {
 
         for (let i = 0; i < this.entries.length; i++) {
             const entry = this.entries[i];
-            const pathBytes = buffer.subarray(entry.pathOffset, entry.pathOffset + entry.pathLen);
+            const bytesAhead = this.entries[i + 1]
+                ? this.entries[i + 1].pathOffset - entry.pathOffset
+                : this.pathBlobEndOffset - entry.pathOffset;
+            const pathBytes = buffer.subarray(entry.pathOffset, entry.pathOffset + bytesAhead);
             entry.path = new TextDecoder().decode(pathBytes);
             console.log(`Read path for entry ${i}: "${entry.path}"`);
         }
