@@ -9,22 +9,22 @@ importers:
   .:
     dependencies:
       '@zenfs/core':
-        specifier: ^2.5.0
-        version: 2.5.0
+        specifier: ^2.5.2
+        version: 2.5.2
       RealFS-ng-prototype.git#dev:
         specifier: github:LosersUnited/RealFS-ng-prototype
         version: https://codeload.github.com/LosersUnited/RealFS-ng-prototype/tar.gz/eb473ca27545abdb74b9ebb3c9e990794212efb4
 
 packages:
 
-  '@types/node@24.10.4':
-    resolution: {integrity: sha512-vnDVpYPMzs4wunl27jHrfmwojOGKya0xyM3sH+UE5iv5uPS6vX7UIoh6m+vQc5LGBq52HBKPIn/zcSZVzeDEZg==}
+  '@types/node@25.5.0':
+    resolution: {integrity: sha512-jp2P3tQMSxWugkCUKLRPVUpGaL5MVFwF8RDuSRztfwgN1wmqJeMSbKlnEtQqU8UrhTmzEmZdu2I6v2dpp7XIxw==}
 
   '@xterm/xterm@5.5.0':
     resolution: {integrity: sha512-hqJHYaQb5OptNunnyAnkHyM8aCjZ1MEIDTQu1iIbbTD/xops91NB5yq1ZK/dC2JDbVWtF23zUtl9JE2NqwT87A==}
 
-  '@zenfs/core@2.5.0':
-    resolution: {integrity: sha512-8yiSZLnFRJz9gfsBC+U1lvbeJprHJJNWSGNnadO+0AyYhW68owhNdoxVkTrP1ugbTDVvbUGiT3iWSBHDd93VZQ==}
+  '@zenfs/core@2.5.2':
+    resolution: {integrity: sha512-MurJjG8qomebDVNDfHpOXp2EcbXFsAxUpCuyCJNuiKPZeQbiAJTfGs6AnuRsDLgnynb1aQy6BCitqVDuxMQvXg==}
     engines: {node: '>= 18'}
     hasBin: true
 
@@ -76,8 +76,8 @@ packages:
   string_decoder@1.3.0:
     resolution: {integrity: sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==}
 
-  undici-types@7.16.0:
-    resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
+  undici-types@7.18.2:
+    resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
   utilium@2.5.8:
     resolution: {integrity: sha512-RNXAYoYH7hefayCW/2LU3SYCwDGQlDc8f4gPCRbMO6dJsYGGlzAhyHqYQGp73ox41JtPKjdqzddAbDhWQ9MrXQ==}
@@ -86,16 +86,16 @@ packages:
 
 snapshots:
 
-  '@types/node@24.10.4':
+  '@types/node@25.5.0':
     dependencies:
-      undici-types: 7.16.0
+      undici-types: 7.18.2
 
   '@xterm/xterm@5.5.0':
     optional: true
 
-  '@zenfs/core@2.5.0':
+  '@zenfs/core@2.5.2':
     dependencies:
-      '@types/node': 24.10.4
+      '@types/node': 25.5.0
       buffer: 6.0.3
       eventemitter3: 5.0.1
       kerium: 1.3.8
@@ -149,7 +149,7 @@ snapshots:
     dependencies:
       safe-buffer: 5.2.1
 
-  undici-types@7.16.0: {}
+  undici-types@7.18.2: {}
 
   utilium@2.5.8:
     dependencies:
